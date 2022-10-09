@@ -1,0 +1,212 @@
+---
+# This is a yaml header.  It includes document metadata.
+title: "Project: Modeling with Classification Trees"
+# Fill in author below and change output to word_document if you prefer 
+# to compile to word. These hashtagged lines will be ignored by R when 
+# compiling the document.
+author: ""
+output: html_document  
+---
+
+```{r setup, include=FALSE}
+# This is a code chunk.  It starts and ends with three backticks. It includes 
+# a header defined by curly braces.  Minimally the header requires an "r" to tell 
+# RMarkdown that this will be an R code chunk. include = F means that this code chunk 
+# will not be printed when the document is knitted.
+
+knitr::opts_chunk$set(echo = TRUE) 
+# This code sets global options for the document. echo = TRUE means that when 
+# the document is compiled the code from each chunk will be displayed along with 
+# the results.
+
+library(tidyverse)
+# This code loads the tidyverse package.
+
+library(rpart)
+library(rpart.plot)
+# This code loads the other packages needed for this assignment.
+
+# Run the entire code chunk by clicking the green arrow in the upper right of the chunk.  Alternatively
+# run execute individual lines by positioning the cursor anywhere on the line 
+# and hitting control-return. The results will be displayed below the code chunk.
+
+```
+
+## Introduction
+
+Data analysis should be reproducible, meaning: every step taken to manipulate, clean, transform, summarize, visualize or model data should be documented exactly so that results can be replicated.  RMarkdown is a tool---or, specifically, a document type---for doing reproducible data science by keeping the code for a project together with the written  analysis and interpretation.   
+
+This is an RMarkdown template that you can use for calculating answers to the project quiz questions for this module. You will also knit this document to HTML (or Word) and submit it for the File Upload assignment.
+
+RMarkdown uses a very simple markup language.  For example, rather than interacting with a menu to format the text, as in MS Word, you use simple code outside of the code chunks:
+
+- A dash and a space at the beginning of a line (as here) creates a bullet point for use in a list.
+- A number with a period at the beginning of a line creates a numbered list.
+- Hashtags create headings (#), subheadings (##) or sub-subheadings (###).
+- Emphasis can be added with asterisks like this: *italics* and **bolding.**
+
+## Notes on compiling this document  
+
+- Change the information in the yaml header above:  title and author.
+- Make sure the output argument is set correctly.  It should read: output: html_document or output: word_document.
+- Once you are finished writing the code necessary to answer the questions in the quiz, clear your environment by clicking on the broom icon in the environment pane (upper right quadrant).
+- Run each code chunk individually (click the green arrow icon in the upper right of the chunk). Start at the top of this document and proceed sequentially to the bottom.  Fix any code errors you find.  
+- Once your code is error-free, click "knit" in the menu above. Your document should compile to HTML, if the output is set to "html_document" (or to word if the output is set to "word_document").
+
+In the code chunk above (entitled "setup") echo is set to TRUE.  This means that the code in your chunks will be displayed, along with the results, in your compiled document.
+
+## Load and Transform Data
+
+Below is code to clean and prepare the dataset for modeling. Before running that code, follow these preparatory steps:
+
+1. After downloading the RMarkdown template and the dataset for the assignment from Canvas, make sure to  copy or move these files from your downloads folder to a folder dedicated to this class--say, MKTG-6487.
+2. You need to define that folder as your "working directory."  To do so, navigate to that folder using the files tab in the lower right quadrant in RStudio.  (You should see your files you moved into this folder in the previous step.) Click the "More" button in the menu under the Files tab and select "Set As Working Directory."
+
+Once the files are in the right location on your computer then run this code to clean and format the data:
+
+```{r}
+# You must run this code to format the dataset properly!
+
+advise_invest <- read_csv("adviseinvest.csv")  %>%            # Download data and save it                                                                    (via assignment operator)
+  select(-product) %>%                                        # Remove the product column
+  na.omit %>%                                                 # Remove rows with NAs
+  filter(income > 0,                                          # Filter out mistaken data
+         num_accts < 5) %>% 
+  mutate(answered = ifelse(answered==0, "no","yes"),          # Turn answered into yes/no 
+         answered = factor(answered,                          # Turn answered into factor
+                           levels  = c("no", "yes")),         # Specify factor levels
+         female = factor(female),                             # Make other binary and categorical                                                                   # variables into factors
+         job = factor(job),
+         rent = factor(rent),
+         own_res = factor(own_res),
+         new_car = factor(new_car),
+         mobile = factor(mobile),
+         chk_acct = factor(chk_acct),
+         sav_acct = factor(sav_acct)) 
+
+advise_invest
+
+a <- advise_invest
+a
+glimpse(a)
+summary(a)
+
+```
+
+## Questions
+
+Use the code chunks below to write code that will enable you to answer the questions in the project quiz.
+
+Some of the questions do not require writing code and have been omitted from this template.
+
+### Q2. The accuracy of the majority class (The proportion of answered calls  in this dataset) rounded is equal to 0.547
+
+```{r}
+
+mean(a$answered == "yes") ##0.5465948 or 55%
+
+```
+
+### Q3. first build the model using just the income variable. Second calculate accuracy with the predict function. The  acc. of the income_model is 0.642 or 64%
+
+
+```{r}
+(income_model<- rpart(answered~income, data=a))
+
+(predict(income_model,type="class")==a$answered)%>%
+  mean()
+
+
+
+```
+
+### Q4. 
+
+
+```{r}
+## I am not sure what should I put here since there is no coding portion for questions 4. I will add the plot of the
+##  income_model just in case which shows the initial split almost to the $39000
+
+# Plot tree object income_model
+rpart.plot(x = income_model)
+
+# not sure if I should add the IG manually calculation, here is my code just in case for IG calculation
+
+parent_node<-c(.453,.547) ## parent node proportions
+child_n1<-c(.635,.365) ## left branch of the node "NO answered" proportions
+child_n2<-c(.398,.602) ## right branch of the node "NO answered" proportions
+
+obs<-c(29499) # total of observations
+n1correct<-c(8063) # total of obs properly classified in the left branch
+n2correct<-c(21436) # total of obs properly classified in the right branch
+prop1<-n1correct/obs       # prop in the left branch
+prop2<-n2correct/obs      # prop in the right branch
+
+entropy_parent<-sum((-parent_node*log(parent_node,2)))
+entropy_1<-sum((-child_n1*log(child_n1,2)))
+entropy_2<-sum((-child_n2*log(child_n2,2)))
+
+IG<- entropy_parent -(entropy_1*prop1+entropy_2*prop2)
+IG
+## information gain of 0.3013834
+
+## my answer to the question
+
+## Basically the goal of the classification tree algorithm is to divide or group the dataset 
+## in subgroups which are more and more pure or (or groups that have more and more similar answers), 
+## so it is trying to put and group to the left one answered or category, and to the right another category. 
+## It is creating groups, and subgroups every time more and more homogeneous, until reach 100% of purity or 
+## with zero entropy. The first split or the parent node is key for this process since the algorithm 
+## is trying to find the value where the data is almost 50% and 50% , which in our project 
+## is the income of $39135 (to the right of this value almost 50% of the individuals did not answered the phone, 
+## and to the left of this value almost the other haft did answered the phone call). In this value is where 
+## the algorithm found the higher entropy or closer to 1 in our dataset which means that here is where the data is 
+## more balanced . This point is important too because the higher entropy also point to the higher information gain 
+## or when the change of purity in the node is the higher.  In short, the algorithm split the dataset trying to 
+## reduce entropy and increase purity in each subgroup by measuring the information gain of each node and possible 
+## split. And it keep repeating the process until it reach 100% of purity, as result each child's node purity is 
+## bigger than its predecessor or its parent node.
+```
+
+### Q5. 
+
+
+```{r}
+## first we create the model including all variables  or predictors
+
+(tree_model <- rpart(answered ~ ., 
+                     data = a))
+ 
+## second generate the plot of the decision tree
+
+rpart.plot(tree_model, tweak = 1.5, roundint=T) ## hard to read
+
+rpart.plot(tree_model, tweak =2.5, roundint=T) ## much better to read
+
+```
+
+### Q6.
+
+
+```{r}
+## Q6.1  tweak of 2.5 produce a better visualization of the decision tree
+
+## Q6.2 
+## Top 3 Predictors are chk_acct, income, and mobile
+ 
+
+
+### Q6.
+
+##  first calculate the tree model accuracy which is 0.819
+  
+(predict(tree_model,type="class")==advise_invest$answered)%>%
+  mean()  
+ 
+##  compare accuracy calculations for both models 
+## income_model accuracy was 0.642 and the tree_model accuracy was 0.819,
+## as a result the answer is yes the tree model is more accurate than the income_model 
+## in about 17%.
+```
+
+

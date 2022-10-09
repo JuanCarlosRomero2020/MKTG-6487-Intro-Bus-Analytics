@@ -1,0 +1,268 @@
+---
+title: "Project: Model Evaluation and Deployment"
+author: " "
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rpart)
+
+```
+
+Notes on compiling this document:  
+
+- Change the information in the yaml header above:  title and author.
+- Make sure the output argument is set correctly.  It should read: output: html_document or output: word_document.
+- Once you are finished writing the code necessary to answer the questions in the quiz, clear your environment by clicking on the broom icon in the environment pane (upper right quadrant).
+- Run each code chunk individually (click the green arrow icon in the upper right of the chunk). Start at the top of this document and proceed sequentially to the bottom.  Fix any code errors you find.  
+- Once your code is error-free, click "knit" in the menu above. Your document should compile to HTML, if the output is set to "html_document" (or to word if the output is set to "word_document").
+
+In the code chunk above (entitled "setup") echo is set to TRUE.  This means that the code in your chunks will be displayed, along with the results, in your compiled document.
+
+## Load and Transform Data
+
+Below is code to clean and prepare the dataset for modeling. Before running that code, follow these preparatory steps:
+
+1. Download the RMarkdown template and the datasets for the assignment from Canvas.  
+
+2. Copy or move these files from your downloads folder to a folder dedicated to this class--say, MKTG-6487.
+
+3. You need to define this folder as your "working directory."  To do so, navigate to that folder using the files tab in the lower right quadrant in RStudio.  (You should see your files you moved into this folder in the previous step.) Click the "More" button in the menu under the Files tab and select "Set As Working Directory."
+
+Once the files are in the right location on your computer then run this code to clean and format the data:
+
+```{r}
+# You must run this code to format the dataset properly!
+
+advise_invest <- read_csv("adviseinvest.csv")  %>%            # Download data
+  select(-product) %>%                                        # Remove the product column
+  na.omit %>%                                                 # Remove NAs
+  filter(income > 0,                                          # Filter out mistaken data
+         num_accts < 5) %>% 
+  mutate(answered = factor(ifelse(answered==0, "no","yes"),   # Turn answered into yes/no factor
+                           levels  = c("no", "yes")),
+         female = factor(female),                             # Make categorical variables into factors
+         job = factor(job),
+         rent = factor(rent),
+         own_res = factor(own_res),
+         new_car = factor(new_car),
+         mobile = factor(mobile),
+         chk_acct = factor(chk_acct),
+         sav_acct = factor(sav_acct)) 
+
+ a <- advise_invest
+ a
+glimpse(a)
+summary(a)
+
+```
+
+And here is code to load the dataset of prospective customers from your working directory. Note that in order to use this dataset for prediction, the variables need to be formatted exactly the same as in the data used to fit the model. It does not include a target variable because the event of answering  or not answering has not happened yet for scheduled customers.
+
+```{r}
+prospective <- read_csv("customer_data.csv") %>% 
+  mutate(female = factor(female),
+         job = factor(job),
+         rent = factor(rent),
+         own_res = factor(own_res),
+         new_car = factor(new_car),
+         mobile = factor(mobile),
+         chk_acct = factor(chk_acct),
+         sav_acct = factor(sav_acct)) 
+
+ p <- prospective
+ p
+glimpse(p)
+summary(p)
+```
+
+## Questions
+
+One of the simplifying assumptions we will make in this project is that all the customers who answer the phone will purchase a product. (This assumption is actually verified by the data.) To model "answered" in this case is therefore equivalent to modeling "purchased."
+
+There are costs and benefits in this case. We will assume that customers purchase a product for \$100 dollars. This was the average cost of AdviseInvest products, according to the Director of Sales.  Also, as we learned in the interview, the agent time to make the sale is worth \$25. Profit would therefore be \$75 dollars for an answered call and a purchase. In sum:
+
+**Benefit**: True positive. The customer is predicted to answer, does answer, and purchases a product for \$100 for a profit of 100 - 25 = \$75.
+
+**Cost**: False positive. The customer is predicted to answer, but does not answer, so there is a loss of \$25. (We assume the agent cannot schedule another call at the last minute, or spends the entire time slot trying to make the call.)
+
+For this exercise, we propose that customers who are not predicted to answer will not be called, so there would be no benefits and no costs for them.  
+
+However, this proposal is for illustration only.  Below you will be asked to come up with a final recommendation for the Director of Sales, and you should feel free to craft a solution---whatever that might be---that fits the details of the case.
+
+One thing to keep in mind for this final phase of the project is that a predictive model is always developed using historical data.  The end goal, however, is to predict the future occurrence of the event that has been modeled. In this exercise, you will practice using data on new customers---that is, customers who have not yet been called---to predict whether they will answer. How you use these predictions in solving the business problem is up to you.
+
+### Q1. 
+
+```{r}
+
+# first we fit the model using all the predictors (like previous module)
+(tree_model <- rpart(answered ~ ., 
+                     data = a))
+
+# second we use the predict function to predict a class label for each customer
+
+predict(tree_model, type = "class") %>% 
+  head
+
+# third we create a confusion matrix from that model
+
+# Confusion matrix
+table(predicted = predict(tree_model, type = "class"),
+      observed = a$answered)
+
+# TP 13820 FP 3008
+
+```
+
+### Q2
+
+```{r}
+# Calculate profit
+13820 * 75 - 25 * 3008
+
+# the profit expected with these cost-benefits is $ 961,300
+```
+
+
+### Q3
+
+```{r}
+
+# Calculate profit baseline 
+
+(13820 + 2304) * 75 - 25 * (3008 + 10367)
+                                             # we add all the customers that answered and treat them as TP
+                                             # we do the same for all those who did not answered and treat as FP
+                                             # The expected profit (if we call all the customers) is $ 874,925.
+# As we can see if do not do any model, and do not try to target those customers who are more likely to answer, and we just call of them as our business strategy produce at the end less profit. We are losing a potential extra profit of $86,375. 
+
+961300-874925
+
+```
+
+### Q4
+
+```{r}
+# first predict the probability to answer yes per customer within the tree model. Note we must choose bracket 2 
+# since we are predicting those customer who will answer YES
+
+predict(tree_model, type = "prob") [,2] %>%
+  head
+
+# second create the new confusion matrix but with a threshold of 0.3
+
+table(predicted = ifelse(predict(tree_model, type = "prob")[,2] > .3, "Yes", "No"),
+      observed = a$answered)
+
+# third we calculate the profit for this new confusion matrix using the TP = 14268 FP = 3776 and the cost benefit
+# matrix provided by the problem TP * $75 or (profits) FP * - $25 or (costs). Current maximum expected  profit is $ 975,700 
+
+14268 * 75 - 25 * 3776
+
+# total accuracy confusion matrix is 0.8091 or 81%
+
+(14268+9599)/(14268+9599+3776+1856)
+
+# accuracy per category YES accuracy is 0.885 or 89%
+# and for NO is 0.718 or 72%
+14268/(14268+1856)
+
+9599/(9599+3776)
+
+# extra profit $100,775 
+
+ 975700 - 874925 
+```
+
+### Q5
+
+```{r}
+# first predict prob for the new prospective customers data set (P)
+
+
+
+predict( tree_model, 
+        newdata = p,
+        type = "prob") %>% 
+  head
+
+# 2
+predictions <- p %>% 
+  select(customer_id) %>% 
+  mutate(Answered_prob = predict(tree_model, 
+                              newdata = p, 
+                              type = "prob")[,2])
+
+head(predictions)
+predictions
+glimpse (predictions)
+summary(predictions)
+
+# 3
+
+prospect_list <- predictions %>% 
+  filter(Answered_prob >= .3) %>% 
+  arrange(desc(Answered_prob))
+
+glimpse(prospect_list)
+head(prospect_list)
+prospect_list
+```
+
+### Q6
+
+Business problem:
+AdviseInvest corporation gain new customers and sell their products through their website after the potential customers filled a form, and scheduled a phone call with one of their representatives. The problem is that almost 50% of those potential prospects who scheduled a phone call did not answered it, as a result there is no sell of any product (no generating revenue). In addition, there are wastes of money (paying employees that are not having call), loose of time and resources allocation (poor employees' utilization, efficiency and satisfaction). 
+The company assigned us as the consulting team to come up with a solution for these issues. We gathered the historical data provided by the company in order to create a model to find patterns and relations to understand and visualize which variables (Predictors) might be related to a customer answering or not the (target variable) AdviseInvest employees' phone call, and as a result buying a product. 
+First of all we run a decision tree model with the historical data (supervised classification), using all the variables or possible predictors (basically we were training our model with previous customers' behavior) in order to find any correlation with our target variable that we labeled as "YES" ( the customer answered the phone call). Second we used this model in a dataset of potential customer (a list of 1000 individuals who has been contacted yet) to determine how many of them will be more likely to answered the phone call ( This is testing our model). And finally, we provided you with some insights, and course of actions to increase employees' efficiency, satisfaction and profit. Here are the results of our analysis.
+1.	Descriptive analysis 
+The mean or accuracy (people who did answered the phone call) in the historical dataset of AdviseInvest is 0.55 or 55%.
+The accuracy or people who did answered the phone call in our decision tree model (using all the predictors) was approx 0.82 or 82%. This basically means that our model was able to categorize and identify a group of 82% individuals of the total historical dataset that under certain circumstances or conditions (variables or predictors found in the dataset) would have answered the phone call and bought a financial package offer by AdviseInvest. It is important to highlight that this is an improvement of the accuracy ( people answering the phone, employees' utilization and satisfaction, and lastly of profit) of almost 27%.
+The three main predictors or variables that our model identified to be more related to our target variable were chk_acct (balance or status of the checking account), income (annual salary), and mobile (did the customer provided a cellphone number or landlord line number to be contacted). 
+Individuals with a Checking account balance higher to $2000 (3), which is the 35% of the total historical data population, answered the phone call in 80% of the time.
+People with an annual income equal or higher of approx $39,000 (27% of the population), but  lower to $80,000 answered the phone in an 87% of the time.
+60% of the total historical population did not provided a mobile to be contacted, and they did not answered the phone call in 45% of the time.
+Even though these results are not conclusive, it indicates that there is a correlation between these 3 predictors, and our target variable or the likelihood of a customer of answering the phone call. Moreover, it might be possible to target potential customers that satisfy these criteria which it will translate in more efficiency and profit. However, further analysis and testing is required. 
+We also calculated the profit through this model by using a confusion matrix with the True positive (people predicted by the model to answer and in reality did answered the phone call) and False Positives (people predicted by the model to answer but in reality that did not happened), and a cost ($25 employees' cost per call) benefit (answering the phone call is equivalent a selling a package or product of $100 -$25 cost) matrix. Here are the calculations.
+TP= 13820
+FP = 3008
+benefit = $75
+cost = $25
+# Calculate profit (with a default threshold of 0.5)
+13820  * $75  - $25  * 3008
+
+# the profit expected for this model with these cost-benefits was $ 961,300
+# Maximum profit for this model (with a threshold of 0.3, This is the optimal class decision threshold.)
+TP = 14268 (true positives people
+FP = 3776
+same cost and benefits as before $25 and $75
+14268 * $75 - $25 * 3776= $ 975,700
+
+
+2.	Predictive Analysis
+In this part of the analysis we tested our three model in a dataset of 1000 potential customers (people categorized with the  same variables and predictors of the historical dataset, but that who have not been contacted yet)  in order to predict and determine the probability of whether an individual will answer or not the phone call. Here are the results.
+The median of this prediction was 0.65 which means that almost 650 individuals from the list of 1000 were categorized or labeled as answering  "YES" and the rest "NO". The mean was 0.55 which means that 55% of the potential customer answered the phone.
+3.	Prescriptive Analysis, and recommendations.
+Scenario 1
+The company does not follow any target strategy, or model suggestions and decide to call each and every one of the potential customers that scheduled a phone call whether they will answered or not. This is the current strategy that the company has been used all these years.
+Using the results from the confusion matrix and the cost benefit matrix we calculate the profit following that strategy which possess an accuracy of 55% of effectiveness or in other words 50% of those who are contacted do not answered the phone call.
+This is the profit:
+# Calculate profit baseline 
+
+(13820 + 2304) * 75 - 25 * (3008 + 10367)= $874,925
+
+scenario 2
+The company use the predictions from the model to target and contact those customers more likely to answered the phone call. We calculated the total accuracy of our model of 81%, but if we only calculate the accuracy of the model to predict YES answered customers we can notice the model accuracy is even greater and increase until almost 90%. The model is extremely good in predicting potential customer that will answer the phone call. This means that by following this model prediction in 90% of the time the AdviseInvest representatives will contact a customer and sell a product.
+Current Employees' utilization 55%
+Model Employees' utilization 90% 
+This is an increment of 45% employees' allocation and satisfaction, or in other words in 1 hour the 4 representatives will contact 7 customers, and just 1 won't answer 
+In terms of profits our model also produces an important improvement 
+Current historical profit was $874,925
+maximum model profit (with a cut off of 0.3) was $ 975,700 
+Potential extra profit of $100,775.  
+
+Recommendations: 
+As a team we recommend the company to test with our model in a daily basis the potential customers dataset to determine those individuals with a probability equal or higher to 0.3 (cut off with maximum profit in our model) of answering the phone call. After running the model with these daily datasets we will produce a filtered recommendation list of those individuals to contact (higher likelihood of answer the phone call) for the Director of Sales at AdviseInvest to distribute to his representatives. This list will increase both profit and employees' effectiveness as we explained above. As a team we will review and update periodically our model to keep these increments constantly improving.
